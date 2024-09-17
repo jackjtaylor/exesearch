@@ -19,12 +19,13 @@ class Search:
     """
     This class holds properties related to a search.
     """
+
     def __init__(self) -> None:
-        self.timestamp  = datetime.datetime.now()
-        
+        self.timestamp = datetime.datetime.now()
+
     # This defines type-hints for later variables to be added.
     term: str
-    path: str
+    path: Path
     is_exclusive: bool
     is_case_sensitive: bool
     found: int
@@ -33,12 +34,12 @@ class Search:
 def ask_for_search() -> Search:
     """
     This function requests a path from the user to search through. This then exclusively or inclusively searches for a term.
-    
+
     :return: The search information, along with a timestamp.
     :rtype: Search
     """
     new_search = Search()
-    
+
     new_search.path = get_search_directory()
     new_search.term = input("What term are you looking for? ")
 
@@ -55,11 +56,20 @@ def ask_for_search() -> Search:
     return new_search
 
 
-def search_workbooks(path, term, exclusive, case_sensitive, count):
-    for file in path.rglob("*.xlsm"):
+def search_workbooks(search: Search):
+    """
+    Thos function searches through each file in a path and if valid, searches that workbook for the search term.
+
+    :param search: The search to perform.
+    :type search: Search
+    """
+    for file in search.path.rglob("*.xlsm"):
         if file.is_file and file.suffix == ".xlsm" and "$" not in file.name:
-            file_path = Path(path, file)
-            count += find_term_in_book(file_path, term, exclusive, case_sensitive)
+            file_path = Path(search.path, file)
+            search.found += find_if_term_in_workbook(
+                file_path, search.term, search.is_exclusive, search.is_case_sensitive
+            )
+
 
 def get_case_sensitivity() -> bool:
     """
@@ -136,7 +146,7 @@ def prepare_workbook(book_path: Path) -> BytesIO:
             return BytesIO(workbook.read())  # This return the in-memory file decrypted
 
 
-def find_term_in_book(
+def find_if_term_in_workbook(
     book_path: Path, term: str, exclusive: bool, case_sensitive: bool
 ) -> int:
     """
@@ -219,7 +229,7 @@ def main():
     filterwarnings("ignore", category=UserWarning, module="openpyxl")
 
     search = ask_for_search()
-    
+
     search_workbooks(search)
 
     input("\nPress enter to exit.")
