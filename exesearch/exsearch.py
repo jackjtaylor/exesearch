@@ -5,6 +5,7 @@ This searches through worksheets by Excel to find seach terms.
 :rtype: print()
 """
 
+import datetime
 from openpyxl import load_workbook, Workbook
 from pathlib import Path
 from tkinter import filedialog, Tk
@@ -14,25 +15,45 @@ from collections import defaultdict
 from warnings import filterwarnings
 
 
-def get_search_information():
+class Search:
+    """
+    This class holds properties related to a search.
+    """
+    def __init__(self) -> None:
+        self.timestamp  = datetime.datetime.now()
+        
+    # This defines type-hints for later variables to be added.
+    term: str
+    path: str
+    is_exclusive: bool
+    is_case_sensitive: bool
+    found: int
+
+
+def ask_for_search() -> Search:
     """
     This function requests a path from the user to search through. This then exclusively or inclusively searches for a term.
+    
+    :return: The search information, along with a timestamp.
+    :rtype: Search
     """
-    path = get_search_directory()
+    new_search = Search()
+    
+    new_search.path = get_search_directory()
+    new_search.term = input("What term are you looking for? ")
 
-    term: str = input("What term are you looking for? ")
-    
-    exclusive: bool = get_exclusivity()
-    case_sensitive: bool = True
-    
-    if not exclusive:
+    new_search.is_exclusive = get_exclusivity()
+    new_search.is_case_sensitive = True
+
+    if not new_search.is_exclusive:
         # This is asked only when an inclusive search is used
-        case_sensitive = get_case_sensitivity()
-    
-    # This is the total count of terms found across workbooks initialised
-    count = 0  
+        new_search.is_case_sensitive = get_case_sensitivity()
 
-    search_workbooks(path, term, exclusive, case_sensitive, count)
+    # This is the total count of terms found across workbooks initialised
+    new_search.found = 0
+
+    return new_search
+
 
 def search_workbooks(path, term, exclusive, case_sensitive, count):
     for file in path.rglob("*.xlsm"):
@@ -197,7 +218,9 @@ def print_found_cells(sheet_cells: defaultdict[str, str]) -> None:
 def main():
     filterwarnings("ignore", category=UserWarning, module="openpyxl")
 
-    get_search_information()
+    search = ask_for_search()
+    
+    search_workbooks(search)
 
     input("\nPress enter to exit.")
 
