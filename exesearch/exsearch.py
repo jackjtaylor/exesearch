@@ -1,5 +1,5 @@
 """
-This searches through worksheets by Excel to find seach terms.
+This searches through worksheets by Excel to find search terms.
 
 :return: The cells, sheets and books a term was found in
 :rtype: print()
@@ -28,7 +28,7 @@ class Search:
     path: Path
     is_exclusive: bool
     is_case_sensitive: bool
-    found: int
+    found: defaultdict
 
 
 def ask_for_search() -> Search:
@@ -50,15 +50,12 @@ def ask_for_search() -> Search:
         # This is asked only when an inclusive search is used
         new_search.is_case_sensitive = get_case_sensitivity()
 
-    # This is the total count of terms found across workbooks initialised
-    new_search.found = 0
-
     return new_search
 
 
-def search_workbooks(search: Search):
+def find_workbooks(search: Search):
     """
-    Thos function searches through each file in a path and if valid, searches that workbook for the search term.
+    This function searches through each file in a path and if valid, searches that workbook for the search term.
 
     :param search: The search to perform.
     :type search: Search
@@ -66,7 +63,7 @@ def search_workbooks(search: Search):
     for file in search.path.rglob("*.xlsm"):
         if file.is_file and file.suffix == ".xlsm" and "$" not in file.name:
             file_path = Path(search.path, file)
-            search.found += find_if_term_in_workbook(
+            search.found = search_for_term_in_workbook(
                 file_path, search.term, search.is_exclusive, search.is_case_sensitive
             )
 
@@ -146,9 +143,9 @@ def prepare_workbook(book_path: Path) -> BytesIO:
             return BytesIO(workbook.read())  # This return the in-memory file decrypted
 
 
-def find_if_term_in_workbook(
+def search_for_term_in_workbook(
     book_path: Path, term: str, exclusive: bool, case_sensitive: bool
-) -> int:
+) -> defaultdict:
     """
     This function finds terms inside a book, in all sheets.
 
@@ -192,7 +189,7 @@ def find_if_term_in_workbook(
 
     print_found_cells(found_cells)
 
-    return count
+    return found_cells
 
 
 def print_workbook(book_path: Path) -> None:
@@ -230,7 +227,7 @@ def main():
 
     search = ask_for_search()
 
-    search_workbooks(search)
+    find_workbooks(search)
 
     input("\nPress enter to exit.")
 
