@@ -5,227 +5,164 @@ This searches through worksheets by Excel to find search terms.
 :rtype: print()
 """
 
-from exsearch.query import Query
+from query import Query
 from openpyxl import load_workbook, Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.cell.cell import Cell
 from pathlib import Path
-from tkinter import filedialog, Tk
 from io import BytesIO
 from msoffcrypto import OfficeFile
 from collections import defaultdict
 
 
-def create_search() -> Query:
-    """
-    This function requests a path from the user to search through. This then exclusively or
-    inclusively searches for a term.
+class Searcher:
+    def __init__(self) -> None:
+        """
+        This initialises the class.
+        """
+        pass
 
-    :return: The search information, along with a timestamp.
-    :rtype: Query
-    """
-    new_search = Query()
+    def run_query(self, query: Query):
+        """
+        This function searches through each file in a path and if valid, searches that workbook for
+        the query term.
 
-    new_search.path = get_search_directory()
-    new_search.term = input("What term are you looking for? ")
+        :param search: The query to perform.
+        :type search: Query
+        """
+        for file in query.path.rglob("*.xlsm" and "*.xlsx"):
+            if file.is_file and "$" not in file.name:
+                file_path = Path(query.path, file)
+                self.search_for_term_in_workbook(file_path, query)
 
-    new_search.is_exclusive = get_exclusivity()
-    new_search.is_case_sensitive = True
+    def prepare_workbook(self, book_path: Path) -> BytesIO:
+        """
+        This function prepares a workbook to be edited, by unlocking any encrypted files.
 
-    if not new_search.is_exclusive:
-        # This is asked only when an inclusive search is used
-        new_search.is_case_sensitive = get_case_sensitivity()
+        :param book_path: The path of the workbook to prepare
+        :type book_path: Path
+        :return: The bytes stream of the decrypted workbook
+        :rtype: BytesIO
+        """
+        with open(book_path, "rb") as workbook:
+            office_file = OfficeFile(workbook)
+            workbook.seek(0)  # This resets the reader for the next workbook.
 
-    return new_search
+            unencrypted_type = "plain"
 
+            if office_file.is_encrypted and office_file.type != unencrypted_type:
+                return self.decrypt_workbook(office_file)
 
-def find_workbooks(search: Query):
-    """
-    This function searches through each file in a path and if valid, searches that workbook for the
-    search term.
-
-    :param search: The search to perform.
-    :type search: Query
-    """
-    for file in search.path.rglob("*.xlsm" and "*.xlsx"):
-        if file.is_file and "$" not in file.name:
-            file_path = Path(search.path, file)
-            search_for_term_in_workbook(file_path, search)
-
-
-def get_case_sensitivity() -> bool:
-    """
-    This function asks the user if the search should be case sensitive.
-
-    :return: If the search is case sensitive.
-    :rtype: bool
-    """
-    return input("Is the term case sensitive? (y/n): ").lower().strip() == "y"
-
-
-def get_exclusivity() -> bool:
-    """
-    This function asks the user if the search should be exclusive or not.
-
-    :return: If the search should be exclusive
-    :rtype: bool
-    """
-    return (
-        input("Would you like to exclusively search, finding only exactly matching cells? (y/n): ")
-        .lower()
-        .strip()
-        == "y"
-    )  # This adds the count of terms found to the count, after searching a workbook.
-
-
-def get_search_directory():
-    """
-    This function returns a searching directory chosen by the user.
-
-    :return: The directory to search
-    :rtype: Path
-    """
-    print("Please choose a directory.")
-
-    root = Tk()  # This creates a hidden tkinter root.
-    root.withdraw()
-
-    path = Path(filedialog.askdirectory(title="Please choose a directory."))  # This shows a file
-    # dialogue.
-
-    return path
-
-
-def prepare_workbook(book_path: Path) -> BytesIO:
-    """
-    This function prepares a workbook to be edited, by unlocking any encrypted files.
-
-    :param book_path: The path of the workbook to prepare
-    :type book_path: Path
-    :return: The bytes stream of the decrypted workbook
-    :rtype: BytesIO
-    """
-    with open(book_path, "rb") as workbook:
-        office_file = OfficeFile(workbook)
-        workbook.seek(0)  # This resets the reader for the next workbook.
-
-        unencrypted_type = "plain"
-
-        if office_file.is_encrypted and office_file.type != unencrypted_type:
-            return decrypt_workbook(office_file)
-
-        else:
-            return BytesIO(workbook.read())  # If the workbook is unencrypted, create a stream.
-
-
-def decrypt_workbook(office_file: OfficeFile) -> BytesIO:  # type: ignore
-    """
-    This is a function that decrypts a workbook using a password provided by the user. If the user
-    doesn't enter the correct password after three attempts, the workbook is returned empty.
-
-    :param office_file: The file to decrypt.
-    :type office_file: OfficeFile
-    :return: The decrypted file's byte stream.
-    :rtype: OfficeFile
-    """
-    decrypted_workbook = BytesIO()  # This creates an in-memory BytesIO object to write the file to.
-
-    for _ in range(3):  # This gives the user three tries to decrypt the workbook.
-        key = input("Please enter the password to decrypt a file.")
-
-        office_file.load_key(password=key)
-        office_file.decrypt(decrypted_workbook)
-
-        if decrypted_workbook:  # If the file was decrypted.
-            break
-
-    return decrypted_workbook  # This return the in-memory file decrypted.
-
-
-def search_for_term_in_workbook(file_path: Path, search: Query):
-    """
-    This function finds terms inside a book, in all sheets.
-
-    :param book: The path to the book
-    :type book: Path
-    :return: The count of how many times a term was found
-    :rtype: int
-    """
-    workbook_byte_stream = prepare_workbook(file_path)
-
-    workbook: Workbook = load_workbook(
-        filename=workbook_byte_stream, data_only=True, read_only=True
-    )
-    print_workbook(file_path)  # This prints the name and path of the workbook
-
-    for sheet in workbook:
-        search_for_term_in_sheet(sheet, search)
-
-    print_found_cells(search.matches)
-
-
-def search_for_term_in_sheet(sheet: Worksheet, search: Query):
-    """
-    This function searches for a term inside a sheet, within a workbook.
-
-    :param count: _description_
-    :type count: _type_
-    :param found_cells: _description_
-    :type found_cells: _type_
-    :param sheet: _description_
-    :type sheet: _type_
-    """
-    for column in sheet.iter_rows():
-        for cell in column:
-            if search.is_exclusive:  # If the search is exclusive, match the exact term.
-                if search.term == str(cell.value):
-                    add_to_found(sheet, cell, search)
             else:
-                if search.is_case_sensitive:  # If the search is just case sensitive, match words.
-                    if search.term in str(cell.value):
-                        add_to_found(sheet, cell, search)
-                else:  # If the search only needs the same characters, match anything.
-                    if search.term.lower().strip() in str(cell.value).lower().strip():
-                        add_to_found(sheet, cell, search)
+                return BytesIO(workbook.read())  # If the workbook is unencrypted, create a stream.
 
+    def decrypt_workbook(self, office_file: OfficeFile) -> BytesIO:  # type: ignore
+        """
+        This is a function that decrypts a workbook using a password provided by the user. If the user
+        doesn't enter the correct password after three attempts, the workbook is returned empty.
 
-def add_to_found(sheet: Worksheet, cell: Cell, search: Query):
-    """
-    This function adds a cell to the found cells in a search.
+        :param office_file: The file to decrypt.
+        :type office_file: OfficeFile
+        :return: The decrypted file's byte stream.
+        :rtype: OfficeFile
+        """
+        decrypted_workbook = (
+            BytesIO()
+        )  # This creates an in-memory BytesIO object to write the file to.
 
-    :param sheet: The worksheet the cell was found in.
-    :type sheet: Worksheet
-    :param cell: The cell that was found to match.
-    :type cell: Cell
-    :param search: The search to add this result to.
-    :type search: Query
-    """
-    search.matches[sheet.title] += f"{cell.column_letter}{cell.row}, "
+        for _ in range(3):  # This gives the user three tries to decrypt the workbook.
+            key = input("Please enter the password to decrypt a file.")
 
+            office_file.load_key(password=key)
+            office_file.decrypt(decrypted_workbook)
 
-def print_workbook(book_path: Path) -> None:
-    """
-    This function prints the workbook name and path.
+            if decrypted_workbook:  # If the file was decrypted.
+                break
 
-    :param book_path: The path to the workbook
-    :type book_path: Path
-    """
-    print(f"\n_______________ Book: {book_path.name} _______________\n")
-    print(f"Path: {book_path.absolute()}\n")
+        return decrypted_workbook  # This return the in-memory file decrypted.
 
+    def search_for_term_in_workbook(self, file_path: Path, query: Query):
+        """
+        This function finds terms inside a book, in all sheets.
 
-def print_found_cells(sheet_cells: defaultdict[str, str]) -> None:
-    """
-    This function prints the cells found, grouped by sheet.
+        :param book: The path to the book
+        :type book: Path
+        :return: The count of how many times a term was found
+        :rtype: int
+        """
+        workbook_byte_stream = self.prepare_workbook(file_path)
 
-    :param sheet_cells: The cells found, by sheet
-    :type sheet_cells: defaultdict[str, str]
-    """
-    print("Cells Found:")
+        workbook: Workbook = load_workbook(
+            filename=workbook_byte_stream, data_only=True, read_only=True
+        )
+        self.print_workbook(file_path)  # This prints the name and path of the workbook
 
-    if not len(sheet_cells):
-        print("None")  # This prints if no cells were found in that book
-        return
+        for sheet in workbook:
+            self.search_for_term_in_sheet(sheet, query)
 
-    for sheet in sheet_cells:
-        print(f"Sheet '{sheet}': {sheet_cells[sheet]}")  # This prints each sheet's found cells
+        self.print_found_cells(query.matches)
+
+    def search_for_term_in_sheet(self, sheet: Worksheet, query: Query):
+        """
+        This function searches for a term inside a sheet, within a workbook.
+
+        :param count: _description_
+        :type count: _type_
+        :param found_cells: _description_
+        :type found_cells: _type_
+        :param sheet: _description_
+        :type sheet: _type_
+        """
+        for column in sheet.iter_rows():
+            for cell in column:
+                if query.is_exclusive:  # If the search is exclusive, match the exact term.
+                    if query.term == str(cell.value):
+                        self.add_to_found(sheet, cell, query)
+                else:
+                    if (
+                        query.is_case_sensitive
+                    ):  # If the search is just case sensitive, match words.
+                        if query.term in str(cell.value):
+                            self.add_to_found(sheet, cell, query)
+                    else:  # If the search only needs the same characters, match anything.
+                        if query.term.lower().strip() in str(cell.value).lower().strip():
+                            self.add_to_found(sheet, cell, query)
+
+    def add_to_found(self, sheet: Worksheet, cell: Cell, query: Query):
+        """
+        This function adds a cell to the found cells in a search.
+
+        :param sheet: The worksheet the cell was found in.
+        :type sheet: Worksheet
+        :param cell: The cell that was found to match.
+        :type cell: Cell
+        :param search: The search to add this result to.
+        :type search: Query
+        """
+        query.matches[sheet.title] += f"{cell.column_letter}{cell.row}, "
+
+    def print_workbook(self, book_path: Path) -> None:
+        """
+        This function prints the workbook name and path.
+
+        :param book_path: The path to the workbook
+        :type book_path: Path
+        """
+        print(f"\n_______________ Book: {book_path.name} _______________\n")
+        print(f"Path: {book_path.absolute()}\n")
+
+    def print_found_cells(self, sheet_cells: defaultdict[str, str]) -> None:
+        """
+        This function prints the cells found, grouped by sheet.
+
+        :param sheet_cells: The cells found, by sheet
+        :type sheet_cells: defaultdict[str, str]
+        """
+        print("Cells Found:")
+
+        if not len(sheet_cells):
+            print("None")  # This prints if no cells were found in that book
+            return
+
+        for sheet in sheet_cells:
+            print(f"Sheet '{sheet}': {sheet_cells[sheet]}")  # This prints each sheet's found cells
