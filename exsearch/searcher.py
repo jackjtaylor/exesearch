@@ -50,7 +50,7 @@ class Searcher:
 
             unencrypted_type = "plain"
 
-            if office_file.is_encrypted and office_file.type != unencrypted_type:
+            if office_file.is_encrypted() and office_file.type != unencrypted_type:
                 return self.decrypt_workbook(office_file)
 
             else:
@@ -73,13 +73,17 @@ class Searcher:
         for _ in range(3):  # This gives the user three tries to decrypt the workbook.
             key = input("Please enter the password to decrypt a file.")
 
-            office_file.load_key(password=key)
-            office_file.decrypt(decrypted_workbook)
+            try:
+                office_file.load_key(password=key)
+                office_file.decrypt(decrypted_workbook)
+            except:
+                continue
 
-            if decrypted_workbook:  # If the file was decrypted.
-                break
+        if not office_file.is_encrypted():  # If the stream has content and was decrypted.
+            return decrypted_workbook
 
-        return decrypted_workbook  # This return the in-memory file decrypted.
+        else:
+            raise ImportError("The file could not be decrypted.")
 
     def search_for_term_in_workbook(self, file_path: Path, query: Query):
         """
