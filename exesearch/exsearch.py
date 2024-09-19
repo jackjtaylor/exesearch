@@ -7,6 +7,7 @@ This searches through worksheets by Excel to find search terms.
 
 import datetime
 from openpyxl import load_workbook, Workbook
+from openpyxl.worksheet.worksheet import Worksheet
 from pathlib import Path
 from tkinter import filedialog, Tk
 from io import BytesIO
@@ -22,6 +23,8 @@ class Search:
 
     def __init__(self) -> None:
         self.timestamp = datetime.datetime.now()
+        self.found = defaultdict(lambda: "")
+        self.found["test"] = "A1, A2"
 
     # This defines type-hints for later variables to be added.
     term: str
@@ -30,10 +33,23 @@ class Search:
     is_case_sensitive: bool
     found: defaultdict
 
+    def get_found_count(self) -> int:
+        """
+        This function returns the count of how many matches were found.
+
+        :return: How many matches were found.
+        :rtype: int
+        """
+        count = 0
+        for value in self.found.values():
+            count += len(value.strip().split(","))
+        return count
+
 
 def ask_for_search() -> Search:
     """
-    This function requests a path from the user to search through. This then exclusively or inclusively searches for a term.
+    This function requests a path from the user to search through. This then exclusively or
+    inclusively searches for a term.
 
     :return: The search information, along with a timestamp.
     :rtype: Search
@@ -55,7 +71,8 @@ def ask_for_search() -> Search:
 
 def find_workbooks(search: Search):
     """
-    This function searches through each file in a path and if valid, searches that workbook for the search term.
+    This function searches through each file in a path and if valid, searches that workbook for the
+    search term.
 
     :param search: The search to perform.
     :type search: Search
@@ -63,9 +80,7 @@ def find_workbooks(search: Search):
     for file in search.path.rglob("*.xlsm"):
         if file.is_file and file.suffix == ".xlsm" and "$" not in file.name:
             file_path = Path(search.path, file)
-            search.found = search_for_term_in_workbook(
-                file_path, search.term, search.is_exclusive, search.is_case_sensitive
-            )
+            search.found = search_for_term_in_workbook(file_path, search)
 
 
 def get_case_sensitivity() -> bool:
@@ -86,9 +101,7 @@ def get_exclusivity() -> bool:
     :rtype: bool
     """
     return (
-        input(
-            "Would you like to exclusively search, finding only exactly matching cells? (y/n): "
-        )
+        input("Would you like to exclusively search, finding only exactly matching cells? (y/n): ")
         .lower()
         .strip()
         == "y"
@@ -123,29 +136,42 @@ def prepare_workbook(book_path: Path) -> BytesIO:
     """
     with open(book_path, "rb") as workbook:
         office_file = OfficeFile(workbook)
-        workbook.seek(0)  # This resets the read position for the file
+        workbook.seek(0)
 
         unencrypted_type = "plain"
-        if (
-            office_file.is_encrypted and office_file.type != unencrypted_type
-        ):  # This checks if the file is not plain and encrypted
-            default_key = input("What is the password to this file?")
-            decrypted_workbook = (
-                BytesIO()
-            )  # This creates an in-memory BytesIO object to write the file to
 
-            office_file.load_key(password=default_key)
-            office_file.decrypt(decrypted_workbook)
-
-            return decrypted_workbook
+        if office_file.is_encrypted and office_file.type != unencrypted_type:
+            return decrypt_workbook(office_file)
 
         else:
-            return BytesIO(workbook.read())  # This return the in-memory file decrypted
+            return BytesIO(workbook.read())
 
 
-def search_for_term_in_workbook(
-    book_path: Path, term: str, exclusive: bool, case_sensitive: bool
-) -> defaultdict:
+def decrypt_workbook(office_file: OfficeFile) -> BytesIO:  # type: ignore
+    """
+    This is a function that decrypts a workbook using a password provided by the user. If the user
+    doesn't enter the correct password after three attempts, the workbook is returned empty.
+
+    :param office_file: The file to decrypt.
+    :type office_file: OfficeFile
+    :return: The decrypted file's byte stream.
+    :rtype: OfficeFile
+    """
+    decrypted_workbook = BytesIO()  # This creates an in-memory BytesIO object to write the file to.
+
+    for _ in range(3):  # This gives the user three tries to decrypt the workbook.
+        key = input("Please enter the password to decrypt a file.")
+
+        office_file.load_key(password=key)
+        office_file.decrypt(decrypted_workbook)
+
+        if decrypted_workbook:  # If the file was decrypted.
+            break
+
+    return decrypted_workbook  # This return the in-memory file decrypted.
+
+
+def search_for_term_in_workbook(file_path: Path, search: Search) -> defaultdict:
     """
     This function finds terms inside a book, in all sheets.
 
@@ -154,42 +180,51 @@ def search_for_term_in_workbook(
     :return: The count of how many times a term was found
     :rtype: int
     """
-    workbook_byte_stream = prepare_workbook(book_path)
+    workbook_byte_stream = prepare_workbook(file_path)
+
     workbook: Workbook = load_workbook(
         filename=workbook_byte_stream, data_only=True, read_only=True
     )
-
-    print_workbook(book_path)  # This prints the name and path of the workbook
-
-    count: int = 0
-    found_cells = defaultdict(
-        lambda: ""
-    )  # This creates a dictionary to sort found cells by sheet
+    print_workbook(file_path)  # This prints the name and path of the workbook
 
     for sheet in workbook:
-        for column in sheet.iter_rows(max_col=11, max_row=99):
-            for cell in column:
-                if exclusive:
-                    if cell.value == term:
-                        count += 1
-                        found_cells[sheet.title] += f"{cell.column_letter}{cell.row}, "
-                else:
-                    if case_sensitive:
-                        if term in str(cell.value):
-                            count += 1
-                            found_cells[sheet.title] += (
-                                f"{cell.column_letter}{cell.row}, "
-                            )
-                    else:
-                        if term.lower().strip() in str(cell.value).lower().strip():
-                            count += 1
-                            found_cells[sheet.title] += (
-                                f"{cell.column_letter}{cell.row}, "
-                            )
+        search_for_term_in_sheet(sheet, search)
 
     print_found_cells(found_cells)
 
     return found_cells
+
+
+def search_for_term_in_sheet(sheet: Worksheet, search: Search) -> int:
+    """
+    This function searches for a term inside a sheet, within a workbook.
+
+    :param count: _description_
+    :type count: _type_
+    :param found_cells: _description_
+    :type found_cells: _type_
+    :param sheet: _description_
+    :type sheet: _type_
+    """
+    count = 0
+
+    for column in sheet.iter_rows():
+        for cell in column:
+            if exclusive:
+                if cell.value == term:
+                    count += 1
+                    found_cells[sheet.title] += f"{cell.column_letter}{cell.row}, "
+            else:
+                if case_sensitive:
+                    if term in str(cell.value):
+                        count += 1
+                        found_cells[sheet.title] += f"{cell.column_letter}{cell.row}, "
+                else:
+                    if term.lower().strip() in str(cell.value).lower().strip():
+                        count += 1
+                        found_cells[sheet.title] += f"{cell.column_letter}{cell.row}, "
+
+    return count
 
 
 def print_workbook(book_path: Path) -> None:
@@ -217,13 +252,14 @@ def print_found_cells(sheet_cells: defaultdict[str, str]) -> None:
         return
 
     for sheet in sheet_cells:
-        print(
-            f"Sheet '{sheet}': {sheet_cells[sheet]}"
-        )  # This prints each sheet's found cells
+        print(f"Sheet '{sheet}': {sheet_cells[sheet]}")  # This prints each sheet's found cells
 
 
 def main():
     filterwarnings("ignore", category=UserWarning, module="openpyxl")
+
+    new = Search()
+    print(new.get_found_cells_count())
 
     search = ask_for_search()
 
