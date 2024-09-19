@@ -1,8 +1,5 @@
 """
-This searches through worksheets by Excel to find search terms.
-
-:return: The cells, sheets and books a term was found in
-:rtype: print()
+This searches through worksheets by Excel to find search terms, by using a Query.
 """
 
 from query import Query
