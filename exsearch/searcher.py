@@ -5,7 +5,7 @@ This searches through worksheets by Excel to find search terms.
 :rtype: print()
 """
 
-import datetime
+from exsearch.query import Query
 from openpyxl import load_workbook, Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.cell.cell import Cell
@@ -14,48 +14,17 @@ from tkinter import filedialog, Tk
 from io import BytesIO
 from msoffcrypto import OfficeFile
 from collections import defaultdict
-from warnings import filterwarnings
 
 
-class Search:
-    """
-    This class holds properties related to a search.
-    """
-
-    def __init__(self) -> None:
-        self.timestamp = datetime.datetime.now()
-        self.found = defaultdict(lambda: "")
-        self.found["test"] = "A1, A2"
-
-    # This defines type-hints for later variables to be added.
-    term: str
-    path: Path
-    is_exclusive: bool
-    is_case_sensitive: bool
-    found: defaultdict
-
-    def get_found_count(self) -> int:
-        """
-        This function returns the count of how many matches were found.
-
-        :return: How many matches were found.
-        :rtype: int
-        """
-        count = 0
-        for value in self.found.values():
-            count += len(value.strip().split(","))
-        return count
-
-
-def create_search() -> Search:
+def create_search() -> Query:
     """
     This function requests a path from the user to search through. This then exclusively or
     inclusively searches for a term.
 
     :return: The search information, along with a timestamp.
-    :rtype: Search
+    :rtype: Query
     """
-    new_search = Search()
+    new_search = Query()
 
     new_search.path = get_search_directory()
     new_search.term = input("What term are you looking for? ")
@@ -70,13 +39,13 @@ def create_search() -> Search:
     return new_search
 
 
-def find_workbooks(search: Search):
+def find_workbooks(search: Query):
     """
     This function searches through each file in a path and if valid, searches that workbook for the
     search term.
 
     :param search: The search to perform.
-    :type search: Search
+    :type search: Query
     """
     for file in search.path.rglob("*.xlsm" and "*.xlsx"):
         if file.is_file and "$" not in file.name:
@@ -173,7 +142,7 @@ def decrypt_workbook(office_file: OfficeFile) -> BytesIO:  # type: ignore
     return decrypted_workbook  # This return the in-memory file decrypted.
 
 
-def search_for_term_in_workbook(file_path: Path, search: Search):
+def search_for_term_in_workbook(file_path: Path, search: Query):
     """
     This function finds terms inside a book, in all sheets.
 
@@ -192,10 +161,10 @@ def search_for_term_in_workbook(file_path: Path, search: Search):
     for sheet in workbook:
         search_for_term_in_sheet(sheet, search)
 
-    print_found_cells(search.found)
+    print_found_cells(search.matches)
 
 
-def search_for_term_in_sheet(sheet: Worksheet, search: Search):
+def search_for_term_in_sheet(sheet: Worksheet, search: Query):
     """
     This function searches for a term inside a sheet, within a workbook.
 
@@ -220,7 +189,7 @@ def search_for_term_in_sheet(sheet: Worksheet, search: Search):
                         add_to_found(sheet, cell, search)
 
 
-def add_to_found(sheet: Worksheet, cell: Cell, search: Search):
+def add_to_found(sheet: Worksheet, cell: Cell, search: Query):
     """
     This function adds a cell to the found cells in a search.
 
@@ -229,9 +198,9 @@ def add_to_found(sheet: Worksheet, cell: Cell, search: Search):
     :param cell: The cell that was found to match.
     :type cell: Cell
     :param search: The search to add this result to.
-    :type search: Search
+    :type search: Query
     """
-    search.found[sheet.title] += f"{cell.column_letter}{cell.row}, "
+    search.matches[sheet.title] += f"{cell.column_letter}{cell.row}, "
 
 
 def print_workbook(book_path: Path) -> None:
@@ -260,16 +229,3 @@ def print_found_cells(sheet_cells: defaultdict[str, str]) -> None:
 
     for sheet in sheet_cells:
         print(f"Sheet '{sheet}': {sheet_cells[sheet]}")  # This prints each sheet's found cells
-
-
-def main():
-    filterwarnings("ignore", category=UserWarning, module="openpyxl")
-
-    search = create_search()
-    find_workbooks(search)
-
-    input("\nPress enter to exit.")
-
-
-if __name__ == "__main__":
-    main()
