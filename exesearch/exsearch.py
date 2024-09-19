@@ -8,6 +8,7 @@ This searches through worksheets by Excel to find search terms.
 import datetime
 from openpyxl import load_workbook, Workbook
 from openpyxl.worksheet.worksheet import Worksheet
+from openpyxl.cell.cell import Cell
 from pathlib import Path
 from tkinter import filedialog, Tk
 from io import BytesIO
@@ -206,25 +207,32 @@ def search_for_term_in_sheet(sheet: Worksheet, search: Search) -> int:
     :param sheet: _description_
     :type sheet: _type_
     """
-    count = 0
-
     for column in sheet.iter_rows():
         for cell in column:
-            if exclusive:
-                if cell.value == term:
-                    count += 1
-                    found_cells[sheet.title] += f"{cell.column_letter}{cell.row}, "
+            if search.is_exclusive:  # If the search is exclusive, match the exact term.
+                if search.term == str(cell.value):
+                    add_to_found(sheet, cell, search)
             else:
-                if case_sensitive:
-                    if term in str(cell.value):
-                        count += 1
-                        found_cells[sheet.title] += f"{cell.column_letter}{cell.row}, "
-                else:
-                    if term.lower().strip() in str(cell.value).lower().strip():
-                        count += 1
-                        found_cells[sheet.title] += f"{cell.column_letter}{cell.row}, "
+                if search.is_case_sensitive:  # If the search is just case sensitive, match words.
+                    if search.term in str(cell.value):
+                        add_to_found(sheet, cell, search)
+                else:  # If the search only needs the same characters, match anything.
+                    if search.term.lower().strip() in str(cell.value).lower().strip():
+                        add_to_found(sheet, cell, search)
 
-    return count
+
+def add_to_found(sheet: Worksheet, cell: Cell, search: Search):
+    """
+    This function adds a cell to the found cells in a search.
+
+    :param sheet: The worksheet the cell was found in.
+    :type sheet: Worksheet
+    :param cell: The cell that was found to match.
+    :type cell: Cell
+    :param search: The search to add this result to.
+    :type search: Search
+    """
+    search.found[sheet.title] += f"{cell.column_letter}{cell.row}, "
 
 
 def print_workbook(book_path: Path) -> None:
