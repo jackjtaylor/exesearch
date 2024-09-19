@@ -47,7 +47,7 @@ class Search:
         return count
 
 
-def ask_for_search() -> Search:
+def create_search() -> Search:
     """
     This function requests a path from the user to search through. This then exclusively or
     inclusively searches for a term.
@@ -78,10 +78,10 @@ def find_workbooks(search: Search):
     :param search: The search to perform.
     :type search: Search
     """
-    for file in search.path.rglob("*.xlsm"):
-        if file.is_file and file.suffix == ".xlsm" and "$" not in file.name:
+    for file in search.path.rglob("*.xlsm" and "*.xlsx"):
+        if file.is_file and "$" not in file.name:
             file_path = Path(search.path, file)
-            search.found = search_for_term_in_workbook(file_path, search)
+            search_for_term_in_workbook(file_path, search)
 
 
 def get_case_sensitivity() -> bool:
@@ -106,7 +106,7 @@ def get_exclusivity() -> bool:
         .lower()
         .strip()
         == "y"
-    )  # This adds the count of terms found to the count, after searching a workbook
+    )  # This adds the count of terms found to the count, after searching a workbook.
 
 
 def get_search_directory():
@@ -118,10 +118,11 @@ def get_search_directory():
     """
     print("Please choose a directory.")
 
-    root = Tk()
+    root = Tk()  # This creates a hidden tkinter root.
     root.withdraw()
 
-    path = Path(filedialog.askdirectory(title="Please choose a directory"))
+    path = Path(filedialog.askdirectory(title="Please choose a directory."))  # This shows a file
+    # dialogue.
 
     return path
 
@@ -137,7 +138,7 @@ def prepare_workbook(book_path: Path) -> BytesIO:
     """
     with open(book_path, "rb") as workbook:
         office_file = OfficeFile(workbook)
-        workbook.seek(0)
+        workbook.seek(0)  # This resets the reader for the next workbook.
 
         unencrypted_type = "plain"
 
@@ -145,7 +146,7 @@ def prepare_workbook(book_path: Path) -> BytesIO:
             return decrypt_workbook(office_file)
 
         else:
-            return BytesIO(workbook.read())
+            return BytesIO(workbook.read())  # If the workbook is unencrypted, create a stream.
 
 
 def decrypt_workbook(office_file: OfficeFile) -> BytesIO:  # type: ignore
@@ -172,7 +173,7 @@ def decrypt_workbook(office_file: OfficeFile) -> BytesIO:  # type: ignore
     return decrypted_workbook  # This return the in-memory file decrypted.
 
 
-def search_for_term_in_workbook(file_path: Path, search: Search) -> defaultdict:
+def search_for_term_in_workbook(file_path: Path, search: Search):
     """
     This function finds terms inside a book, in all sheets.
 
@@ -191,12 +192,10 @@ def search_for_term_in_workbook(file_path: Path, search: Search) -> defaultdict:
     for sheet in workbook:
         search_for_term_in_sheet(sheet, search)
 
-    print_found_cells(found_cells)
-
-    return found_cells
+    print_found_cells(search.found)
 
 
-def search_for_term_in_sheet(sheet: Worksheet, search: Search) -> int:
+def search_for_term_in_sheet(sheet: Worksheet, search: Search):
     """
     This function searches for a term inside a sheet, within a workbook.
 
@@ -266,11 +265,7 @@ def print_found_cells(sheet_cells: defaultdict[str, str]) -> None:
 def main():
     filterwarnings("ignore", category=UserWarning, module="openpyxl")
 
-    new = Search()
-    print(new.get_found_cells_count())
-
-    search = ask_for_search()
-
+    search = create_search()
     find_workbooks(search)
 
     input("\nPress enter to exit.")
